@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SkipIt — Allergen Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --red:#ff3b30;--red-dim:#3a1a1a;--red-bg:#1a0a0a;
+  --bg:#0a0a0a;--surface:#111;--surface2:#1a1a1a;
+  --border:#222;--border2:#2a2a2a;--text:#f0ece4;
+  --muted:#555;--dimmer:#333;
+  --green:#4caf50;--green-bg:#0a1f0a;--green-border:#2a5a2a;--green-dim:#1a4a1a;
+}
+body{background:var(--bg);color:var(--text);font-family:'Courier New',monospace;min-height:100vh;display:flex;justify-content:center;padding-bottom:60px;}
+.wrap{width:100%;max-width:480px;padding:40px 24px 0;}
+.header{display:flex;align-items:center;gap:12px;margin-bottom:4px;}
+.logo-icon{width:36px;height:36px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;}
+.logo-text{font-size:28px;font-weight:800;letter-spacing:-1px;}
+.subtitle{font-size:11px;color:var(--muted);margin:0 0 28px 48px;letter-spacing:.08em;}
+.section-label{font-size:11px;color:#444;margin-bottom:10px;letter-spacing:.08em;}
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:24px;}
+.pill{font-size:11px;background:var(--red-bg);color:#ff6b6b;border:1px solid var(--red-dim);border-radius:6px;padding:4px 10px;letter-spacing:.05em;}
+.tabs{display:flex;background:var(--surface2);border-radius:12px;padding:4px;gap:4px;margin-bottom:20px;}
+.tab{flex:1;padding:10px 0;background:transparent;color:var(--muted);border:none;border-radius:9px;cursor:pointer;font-size:13px;font-family:inherit;font-weight:600;letter-spacing:.05em;text-transform:uppercase;transition:all .2s;}
+.tab.active{background:var(--red);color:#fff;}
+.search-row{display:flex;gap:8px;margin-bottom:12px;}
+.search-input{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;color:var(--text);font-family:inherit;font-size:14px;outline:none;}
+.search-input:focus{border-color:var(--red);}
+.search-input::placeholder{color:#333;}
+.search-btn{background:var(--red);border:none;border-radius:12px;padding:14px 20px;color:#fff;font-size:18px;cursor:pointer;flex-shrink:0;}
+.hint{font-size:11px;color:var(--dimmer);text-align:center;}
+.scan-open-btn{width:100%;padding:16px;background:var(--red);border:none;border-radius:12px;color:#fff;font-size:15px;font-family:inherit;font-weight:600;cursor:pointer;letter-spacing:.05em;margin-bottom:8px;}
+.scan-area{position:relative;width:100%;border-radius:16px;overflow:hidden;background:#000;}
+#interactive{width:100%;height:240px;}
+#interactive video{width:100%;height:100%;object-fit:cover;}
+#interactive canvas{display:none;}
+.scan-overlay{position:absolute;inset:0;border:2px solid var(--red);border-radius:16px;pointer-events:none;}
+.scan-line{position:absolute;left:15%;right:15%;height:2px;background:var(--red);opacity:.8;animation:scanline 2s ease-in-out infinite;}
+@keyframes scanline{0%,100%{top:30%}50%{top:70%}}
+.scan-hint{font-size:12px;color:var(--muted);text-align:center;margin-top:10px;}
+.cancel-btn{width:100%;padding:12px;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-family:inherit;font-size:13px;cursor:pointer;margin-top:8px;}
+.spinner-wrap{display:none;flex-direction:column;align-items:center;gap:16px;padding:50px 0;}
+.spinner{width:40px;height:40px;border:3px solid var(--surface2);border-top:3px solid var(--red);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner-label{font-size:12px;color:#444;letter-spacing:.08em;}
+.error-box{display:none;margin-top:16px;padding:14px 16px;background:var(--red-bg);border:1px solid var(--red-dim);border-radius:12px;color:#ff6b6b;font-size:13px;line-height:1.5;}
+.result{display:none;}
+.verdict{padding:22px;border-radius:16px;margin-bottom:20px;display:flex;align-items:center;gap:16px;border:2px solid;}
+.verdict.safe{background:var(--green-bg);border-color:var(--green-border);}
+.verdict.danger{background:var(--red-bg);border-color:#5a1a1a;}
+.verdict.unknown{background:var(--surface);border-color:var(--border);}
+.verdict-icon{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;}
+.verdict-icon.safe{background:var(--green-dim);}
+.verdict-icon.danger{background:var(--red);}
+.verdict-icon.unknown{background:var(--border2);}
+.verdict-title{font-size:22px;font-weight:800;letter-spacing:-.5px;}
+.verdict-title.safe{color:var(--green);}
+.verdict-title.danger{color:var(--red);}
+.verdict-title.unknown{color:var(--muted);}
+.verdict-sub{font-size:12px;color:var(--muted);margin-top:3px;}
+.product-card{padding:14px 16px;background:var(--surface);border-radius:14px;border:1px solid #1e1e1e;margin-bottom:20px;}
+.product-name{font-size:15px;font-weight:500;}
+.product-brand{font-size:12px;color:var(--muted);margin-top:2px;}
+.ing-label{font-size:11px;color:#444;margin-bottom:12px;letter-spacing:.08em;}
+.ing-list{background:var(--surface);border-radius:14px;border:1px solid #1e1e1e;overflow:hidden;}
+.ing-item{padding:11px 16px;border-bottom:1px solid #181818;display:flex;align-items:flex-start;gap:10px;}
+.ing-item:last-child{border-bottom:none;}
+.ing-item.flagged{background:#1f0808;}
+.ing-dot{font-size:13px;flex-shrink:0;margin-top:1px;color:#2a2a2a;}
+.ing-item.flagged .ing-dot{color:var(--red);}
+.ing-text{font-size:13px;color:#888;text-transform:capitalize;}
+.ing-item.flagged .ing-text{color:#ff6b6b;}
+.ing-tags{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;}
+.ing-tag{font-size:10px;background:#3a0a0a;color:#ff6b6b;border-radius:4px;padding:2px 7px;letter-spacing:.05em;}
+.disclaimer{font-size:10px;color:#333;margin-top:20px;line-height:1.7;text-align:center;}
+.back-btn{width:100%;margin-top:16px;padding:14px;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;color:var(--text);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.05em;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="logo-icon">X</div>
+    <span class="logo-text">SkipIt</span>
+  </div>
+  <p class="subtitle">ALLERGEN SCANNER</p>
+
+  <div id="screen-search">
+    <p class="section-label">YOUR ALLERGENS</p>
+    <div class="pills">
+      <span class="pill">PEANUT</span><span class="pill">TREE NUTS</span>
+      <span class="pill">APPLE</span><span class="pill">PEAR</span>
+      <span class="pill">KIWI</span><span class="pill">CHERRY</span>
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="tab-search" onclick="switchTab('search')">Search</button>
+      <button class="tab" id="tab-scan" onclick="switchTab('scan')">Scan</button>
+    </div>
+    <div id="panel-search">
+      <div class="search-row">
+        <input class="search-input" id="search-input" type="text" placeholder="Nutella, Oreo, Doritos..."/>
+        <button class="search-btn" onclick="doSearch()">-></button>
+      </div>
+      <p class="hint">Type any food product name</p>
+    </div>
+    <div id="panel-scan" style="display:none;">
+      <div id="scan-launcher">
+        <button class="scan-open-btn" onclick="startScan()">OPEN CAMERA</button>
+        <p class="hint">Scan barcode on any food package</p>
+      </div>
+      <div id="scan-live" style="display:none;">
+        <div class="scan-area">
+          <div id="interactive"></div>
+          <div class="scan-overlay"><div class="scan-line"></div></div>
+        </div>
+        <p class="scan-hint">Point camera at barcode</p>
+        <button class="cancel-btn" onclick="stopScan()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="spinner-wrap" id="screen-loading">
+    <div class="spinner"></div>
+    <span class="spinner-label">CHECKING INGREDIENTS...</span>
+  </div>
+  <div class="error-box" id="error-box"></div>
+
+  <div class="result" id="screen-result">
+    <div class="verdict" id="verdict">
+      <div class="verdict-icon" id="verdict-icon"></div>
+      <div>
+        <div class="verdict-title" id="verdict-title"></div>
+        <div class="verdict-sub" id="verdict-sub"></div>
+      </div>
+    </div>
+    <div class="product-card">
+      <div class="product-name" id="product-name"></div>
+      <div class="product-brand" id="product-brand" style="display:none;"></div>
+    </div>
+    <p class="ing-label" id="ing-label"></p>
+    <div class="ing-list" id="ing-list"></div>
+    <p class="disclaimer">Always verify with product packaging. SkipIt is not medical advice.</p>
+    <button class="back-btn" onclick="reset()">SEARCH ANOTHER</button>
+  </div>
+</div>
+
+<script>
+var ALLERGENS=[
+  {id:'peanut',label:'Peanut',keys:['peanut','arachis','arachide','groundnut']},
+  {id:'nuts',label:'Tree Nuts',keys:['almond','cashew','walnut','pecan','pistachio','hazelnut','macadamia','brazil nut','pine nut','praline','marzipan','nougat','nut flour','nut oil']},
+  {id:'apple',label:'Apple',keys:['apple','malus','cider','applesauce']},
+  {id:'pear',label:'Pear',keys:['pear','pyrus']},
+  {id:'kiwi',label:'Kiwi',keys:['kiwi','actinidia']},
+  {id:'cherry',label:'Cherry',keys:['cherry','prunus avium','cerise','maraschino']},
+];
+
+var DB={
+  "nutella":{name:"Nutella",brand:"Ferrero",ing:["sugar","palm oil","hazelnuts","skim milk powder","fat-reduced cocoa powder","lecithin (soy)","vanillin"]},
+  "peanut butter":{name:"Peanut Butter",brand:"Generic",ing:["peanuts","salt","sugar","hydrogenated vegetable oil"]},
+  "almond butter":{name:"Almond Butter",brand:"Generic",ing:["almonds","salt"]},
+  "oreo":{name:"Oreo Cookies",brand:"Nabisco",ing:["unbleached enriched flour","sugar","palm oil","cocoa","high fructose corn syrup","leavening","cornstarch","salt","soy lecithin","vanillin"]},
+  "oreos":{name:"Oreo Cookies",brand:"Nabisco",ing:["unbleached enriched flour","sugar","palm oil","cocoa","high fructose corn syrup","leavening","cornstarch","salt","soy lecithin","vanillin"]},
+  "kit kat":{name:"Kit Kat",brand:"Nestle",ing:["sugar","wheat flour","cocoa butter","nonfat milk","chocolate","refined palm kernel oil","cocoa mass","lactose","milk fat","soy lecithin","yeast","vanillin","salt"]},
+  "kitkat":{name:"Kit Kat",brand:"Nestle",ing:["sugar","wheat flour","cocoa butter","nonfat milk","chocolate","refined palm kernel oil","cocoa mass","lactose","milk fat","soy lecithin","yeast","vanillin","salt"]},
+  "reese's":{name:"Reese's Peanut Butter Cups",brand:"Hershey's",ing:["milk chocolate","peanuts","sugar","dextrose","salt"]},
+  "reeses":{name:"Reese's Peanut Butter Cups",brand:"Hershey's",ing:["milk chocolate","peanuts","sugar","dextrose","salt"]},
+  "reese's pieces":{name:"Reese's Pieces",brand:"Hershey's",ing:["peanuts","sugar","dextrose","cocoa butter","peanut flour","confectioner's glaze","salt"]},
+  "chips ahoy":{name:"Chips Ahoy",brand:"Nabisco",ing:["unbleached enriched flour","semisweet chocolate chips","sugar","soybean oil","corn syrup","leavening","salt","soy lecithin","natural flavor"]},
+  "m&m":{name:"M&M's",brand:"Mars",ing:["milk chocolate","sugar","cornstarch","corn syrup","dextrin","coloring","carnauba wax"]},
+  "m&ms":{name:"M&M's",brand:"Mars",ing:["milk chocolate","sugar","cornstarch","corn syrup","dextrin","coloring","carnauba wax"]},
+  "peanut m&ms":{name:"Peanut M&M's",brand:"Mars",ing:["milk chocolate","peanuts","sugar","cornstarch","corn syrup","dextrin","coloring","carnauba wax"]},
+  "snickers":{name:"Snickers",brand:"Mars",ing:["milk chocolate","peanuts","corn syrup","sugar","palm oil","skim milk","lactose","salt","egg whites","artificial flavor"]},
+  "twix":{name:"Twix",brand:"Mars",ing:["milk chocolate","enriched flour","sugar","palm oil","corn syrup","skim milk","dextrose","salt","cocoa powder","soy lecithin","baking soda","natural flavor"]},
+  "bounty":{name:"Bounty",brand:"Mars",ing:["desiccated coconut","sugar","glucose syrup","milk chocolate","skim milk powder","cocoa butter","cocoa mass","soy lecithin","salt","natural vanilla extract"]},
+  "aero":{name:"Aero",brand:"Nestle",ing:["sugar","cocoa butter","skim milk powder","cocoa mass","whey powder","butterfat","soy lecithin","natural vanilla flavor"]},
+  "coffee crisp":{name:"Coffee Crisp",brand:"Nestle",ing:["sugar","enriched wheat flour","modified palm kernel oil","cocoa powder","glucose-fructose","coffee","skim milk powder","cocoa butter","soy lecithin","baking soda","salt","natural flavor"]},
+  "smarties":{name:"Smarties",brand:"Nestle",ing:["sugar","cocoa butter","skim milk powder","cocoa mass","butterfat","whey powder","modified starch","soy lecithin","carnauba wax","colours","vanilla extract"]},
+  "caramilk":{name:"Caramilk",brand:"Cadbury",ing:["sugar","cocoa butter","skim milk powder","cocoa mass","modified palm kernel oil","butter","salt","soy lecithin","natural vanilla extract"]},
+  "cheerios":{name:"Cheerios",brand:"General Mills",ing:["whole grain oats","modified corn starch","sugar","salt","calcium carbonate","oat bran","vitamins","minerals"]},
+  "lucky charms":{name:"Lucky Charms",brand:"General Mills",ing:["whole grain oats","marshmallows","sugar","oat flour","corn starch","corn syrup","modified corn starch","salt","gelatin","natural and artificial flavor","colors"]},
+  "frosted flakes":{name:"Frosted Flakes",brand:"Kellogg's",ing:["milled corn","sugar","malt flavoring","salt","vitamins","minerals"]},
+  "lays":{name:"Lay's Classic Chips",brand:"Frito-Lay",ing:["potatoes","vegetable oil","salt"]},
+  "lay's":{name:"Lay's Classic Chips",brand:"Frito-Lay",ing:["potatoes","vegetable oil","salt"]},
+  "doritos":{name:"Doritos Nacho Cheese",brand:"Frito-Lay",ing:["corn","vegetable oil","cheddar cheese","maltodextrin","salt","whey","romano cheese","buttermilk","spices","artificial flavor","natural flavor"]},
+  "pringles":{name:"Pringles Original",brand:"Kellogg's",ing:["dried potatoes","vegetable oil","corn flour","cornstarch","rice flour","maltodextrin","salt"]},
+  "ritz":{name:"Ritz Crackers",brand:"Nabisco",ing:["enriched flour","soybean oil","sugar","leavening","salt","high fructose corn syrup","soy lecithin","natural flavor"]},
+  "coca-cola":{name:"Coca-Cola",brand:"Coca-Cola",ing:["carbonated water","high fructose corn syrup","caramel color","phosphoric acid","natural flavors","caffeine"]},
+  "coke":{name:"Coca-Cola",brand:"Coca-Cola",ing:["carbonated water","high fructose corn syrup","caramel color","phosphoric acid","natural flavors","caffeine"]},
+  "pepsi":{name:"Pepsi",brand:"PepsiCo",ing:["carbonated water","high fructose corn syrup","caramel color","sugar","phosphoric acid","caffeine","citric acid","natural flavor"]},
+  "sprite":{name:"Sprite",brand:"Coca-Cola",ing:["carbonated water","high fructose corn syrup","citric acid","natural flavors","sodium citrate","sodium benzoate"]},
+  "apple juice":{name:"Apple Juice",brand:"Generic",ing:["apple juice","vitamin c"]},
+  "ketchup":{name:"Ketchup",brand:"Heinz",ing:["tomato concentrate","distilled vinegar","high fructose corn syrup","corn syrup","salt","spice","onion powder","natural flavoring"]},
+  "mayonnaise":{name:"Mayonnaise",brand:"Hellmann's",ing:["soybean oil","water","whole eggs","egg yolks","vinegar","salt","sugar","lemon juice","natural flavors"]},
+  "mayo":{name:"Mayonnaise",brand:"Hellmann's",ing:["soybean oil","water","whole eggs","egg yolks","vinegar","salt","sugar","lemon juice","natural flavors"]},
+  "skittles":{name:"Skittles",brand:"Mars",ing:["sugar","corn syrup","hydrogenated palm kernel oil","apple juice","citric acid","tapioca dextrin","modified corn starch","natural and artificial flavors","colors","carnauba wax"]},
+  "starburst":{name:"Starburst",brand:"Mars",ing:["corn syrup","sugar","hydrogenated palm kernel oil","apple juice","citric acid","tapioca dextrin","gelatin","modified corn starch","natural and artificial flavors","colors"]},
+  "gummy bears":{name:"Gummy Bears",brand:"Haribo",ing:["glucose syrup","sugar","gelatin","dextrose","citric acid","fruit juice","natural and artificial flavors","colors"]},
+  "sour patch kids":{name:"Sour Patch Kids",brand:"Mondelez",ing:["sugar","invert sugar","corn syrup","modified corn starch","tartaric acid","citric acid","natural and artificial flavor","colors"]},
+  "nature valley":{name:"Nature Valley Granola Bar",brand:"General Mills",ing:["whole grain oats","sugar","canola oil","yellow corn flour","almonds","honey","salt","soy lecithin","baking soda","nonfat milk"]},
+  "kind bar":{name:"KIND Bar",brand:"KIND",ing:["almonds","peanuts","chicory root fiber","sugar","palm kernel oil","glucose syrup","honey","crisp rice","sea salt","soy lecithin"]},
+  "pizza":{name:"Cheese Pizza",brand:"Generic",ing:["enriched flour","water","mozzarella cheese","tomatoes","tomato paste","salt","sugar","soybean oil","spices","yeast"]},
+  "french fries":{name:"French Fries",brand:"Generic",ing:["potatoes","vegetable oil","dextrose","sodium acid pyrophosphate","salt"]},
+  "granola":{name:"Granola",brand:"Generic",ing:["rolled oats","honey","brown sugar","vegetable oil","almonds","raisins","salt","cinnamon"]},
+  "wonder bread":{name:"Wonder Bread",brand:"Wonder",ing:["enriched flour","water","high fructose corn syrup","soybean oil","yeast","salt","monoglycerides","soy lecithin","calcium propionate"]},
+};
+
+function flagIngredients(list){
+  return list.map(function(ingredient){
+    var lower=ingredient.toLowerCase();
+    var matched=ALLERGENS.filter(function(a){return a.keys.some(function(k){return lower.indexOf(k)!==-1;});});
+    return {text:ingredient,allergens:matched,flagged:matched.length>0};
+  });
+}
+
+function lookup(query){
+  var q=query.toLowerCase().trim();
+  if(DB[q])return DB[q];
+  var keys=Object.keys(DB);
+  for(var i=0;i<keys.length;i++){
+    if(q.indexOf(keys[i])!==-1||keys[i].indexOf(q)!==-1)return DB[keys[i]];
+  }
+  return null;
+}
+
+function show(id){document.getElementById(id).style.display='block';}
+function hide(id){document.getElementById(id).style.display='none';}
+function showFlex(id){document.getElementById(id).style.display='flex';}
+function showError(msg){var b=document.getElementById('error-box');b.innerHTML=msg;b.style.display='block';}
+
+function switchTab(t){
+  document.getElementById('tab-search').classList.toggle('active',t==='search');
+  document.getElementById('tab-scan').classList.toggle('active',t==='scan');
+  document.getElementById('panel-search').style.display=t==='search'?'block':'none';
+  document.getElementById('panel-scan').style.display=t==='scan'?'block':'none';
+  if(t==='search')stopScan();
+}
+
+function reset(){
+  stopScan();
+  document.getElementById('search-input').value='';
+  hide('screen-result');hide('error-box');hide('screen-loading');
+  show('screen-search');switchTab('search');
+}
+
+function renderResult(productData,flagged){
+  var noData=flagged.length===0;
+  var safe=!noData&&flagged.every(function(i){return !i.flagged;});
+  var flagCount=flagged.filter(function(i){return i.flagged;}).length;
+  var verdict=document.getElementById('verdict');
+  var icon=document.getElementById('verdict-icon');
+  var title=document.getElementById('verdict-title');
+  var sub=document.getElementById('verdict-sub');
+  verdict.className='verdict '+(noData?'unknown':safe?'safe':'danger');
+  icon.className='verdict-icon '+(noData?'unknown':safe?'safe':'danger');
+  title.className='verdict-title '+(noData?'unknown':safe?'safe':'danger');
+  icon.textContent=noData?'?':safe?'OK':'X';
+  title.textContent=noData?'UNKNOWN':safe?'LOOKS SAFE':'SKIP IT';
+  sub.textContent=noData?'No data for this product':safe?'No allergens detected':flagCount+' flagged ingredient'+(flagCount>1?'s':'');
+  document.getElementById('product-name').textContent=productData.name;
+  var brandEl=document.getElementById('product-brand');
+  if(productData.brand){brandEl.textContent=productData.brand;brandEl.style.display='block';}
+  else{brandEl.style.display='none';}
+  var ingLabel=document.getElementById('ing-label');
+  var ingList=document.getElementById('ing-list');
+  ingList.innerHTML='';
+  if(flagged.length>0){
+    ingLabel.textContent='INGREDIENT BREAKDOWN — '+flagged.length+' ITEMS';
+    flagged.forEach(function(ing){
+      var item=document.createElement('div');
+      item.className='ing-item'+(ing.flagged?' flagged':'');
+      var dot=document.createElement('span');
+      dot.className='ing-dot';
+      dot.textContent=ing.flagged?'X':'.';
+      var right=document.createElement('div');
+      var txt=document.createElement('span');
+      txt.className='ing-text';
+      txt.textContent=ing.text;
+      right.appendChild(txt);
+      if(ing.flagged&&ing.allergens.length>0){
+        var tags=document.createElement('div');
+        tags.className='ing-tags';
+        ing.allergens.forEach(function(a){
+          var tag=document.createElement('span');
+          tag.className='ing-tag';
+          tag.textContent=a.label.toUpperCase();
+          tags.appendChild(tag);
+        });
+        right.appendChild(tags);
+      }
+      item.appendChild(dot);item.appendChild(right);
+      ingList.appendChild(item);
+    });
+  } else {ingLabel.textContent='';}
+  hide('screen-search');hide('screen-loading');hide('error-box');
+  show('screen-result');
+}
+
+function doSearch(){
+  var q=document.getElementById('search-input').value.trim();
+  if(!q)return;
+  hide('error-box');hide('screen-result');hide('screen-search');
+  showFlex('screen-loading');
+  setTimeout(function(){
+    var product=lookup(q);
+    hide('screen-loading');
+    if(!product){
+      show('screen-search');
+      showError('"'+q+'" not in database yet.<br>Try: Nutella, Oreo, Doritos, Snickers, Kit Kat, Skittles, Cheerios, Lays, Pringles, Coke...');
+      return;
+    }
+    renderResult(product,flagIngredients(product.ing));
+  },500);
+}
+
+var scanning=false;
+function startScan(){
+  hide('scan-launcher');show('scan-live');scanning=true;
+  Quagga.init({
+    inputStream:{name:"Live",type:"LiveStream",target:document.getElementById('interactive'),constraints:{facingMode:"environment"}},
+    decoder:{readers:["ean_reader","ean_8_reader","upc_reader","upc_e_reader","code_128_reader"]},
+    locate:true
+  },function(err){
+    if(err){stopScan();show('scan-launcher');showError("Camera not available. Use Search instead.");return;}
+    Quagga.start();
+  });
+  Quagga.onDetected(function(data){
+    var code=data.codeResult.code;
+    stopScan();fetchBarcode(code);
+  });
+}
+
+function stopScan(){
+  if(scanning){try{Quagga.stop();}catch(e){}scanning=false;}
+  hide('scan-live');show('scan-launcher');
+}
+
+function fetchBarcode(code){
+  hide('screen-search');showFlex('screen-loading');
+  fetch('https://world.openfoodfacts.org/api/v0/product/'+code+'.json')
+    .then(function(r){return r.json();})
+    .then(function(data){
+      hide('screen-loading');
+      if(data.status===0||!data.product){
+        show('screen-search');
+        showError('Barcode scanned but product not found. Try searching by name.');
+        return;
+      }
+      var p=data.product;
+      var raw=p.ingredients_text||p.ingredients_text_en||'';
+      var list=raw.split(/[,;]/).map(function(s){return s.trim();}).filter(Boolean);
+      renderResult({name:p.product_name||'Unknown product',brand:p.brands||''},flagIngredients(list));
+    })
+    .catch(function(){
+      hide('screen-loading');show('screen-search');
+      showError('Could not load barcode data. Search by name instead.');
+    });
+}
+
+document.getElementById('search-input').addEventListener('keydown',function(e){if(e.key==='Enter')doSearch();});
+</script>
+
+</body>
+</html>
